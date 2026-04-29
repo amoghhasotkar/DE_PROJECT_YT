@@ -4,18 +4,21 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import date
+from airflow.decorators import task
+from airflow.models import Variable
 
 load_dotenv(dotenv_path=Path(__file__).resolve().with_name('.env'))
 
-API_KEY = os.getenv('API_KEY')
+API_KEY = Variable.get('API_KEY')
 
 max_results = 10
 
 if not API_KEY:
     raise RuntimeError('API_KEY is missing from .env')
 
-CHANNEL_HANDLE = 'SamayRainaOfficial'
+CHANNEL_HANDLE = Variable.get('CHANNEL_HANDLE')
 
+@task
 def get_playlist_id():
     try:
         url = f'https://youtube.googleapis.com/youtube/v3/channels?part=contentDetails&forHandle={CHANNEL_HANDLE}&key={API_KEY}'
@@ -40,6 +43,7 @@ def get_playlist_id():
         raise e
 
 
+@task
 def get_video_ids(playlistId):
 
     video_ids=[]
@@ -76,6 +80,7 @@ def get_video_ids(playlistId):
         raise e
     
 
+@task
 def extract_video_data(video_id_list):
 
     video_data = []
@@ -96,9 +101,10 @@ def extract_video_data(video_id_list):
             items = data.get("items", [])
             for item in items:
                 video_info = {
-                    "videoId": item["id"],
+                    "video_id": item["id"],
                     "title": item["snippet"]["title"],
                     "publishedAt": item["snippet"]["publishedAt"],
+                    "duration": item["contentDetails"]["duration"],
                     "viewCount": item["statistics"].get("viewCount", 0),
                     "likeCount": item["statistics"].get("likeCount", 0),
                     "commentCount": item["statistics"].get("commentCount", 0)
@@ -109,6 +115,8 @@ def extract_video_data(video_id_list):
     except requests.exceptions.RequestException as e:
         raise e
     
+    
+@task   
 def save_to_json(video_data):
     file_path = f'./data/YT_video_data_{date.today()}.json'
     with open(file_path, 'w',encoding='utf-8') as json_file:
